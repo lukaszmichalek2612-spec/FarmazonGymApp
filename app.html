@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>FarmazonGymApp — Login</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="logo"><div class="brand">FarmazonGymApp</div><div class="small">Logowanie</div></div>
+    <div><a class="ghost" href="app.html">Otwórz aplikację (demo)</a></div>
+  </div>
+
+  <div class="card" id="authCard">
+    <h3>Zaloguj / Zarejestruj</h3>
+    <div class="row" style="margin-top:8px">
+      <input id="email" placeholder="Email" />
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input id="pass" type="password" placeholder="Hasło" />
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="btnLogin" class="button">Zaloguj</button>
+      <button id="btnRegister" class="ghost">Zarejestruj</button>
+    </div>
+    <div id="msg" class="small" style="margin-top:8px"></div>
+    <div style="margin-top:12px" class="small">Po zalogowaniu zostaniesz przekierowany do widoku zależnego od roli (user / trainer).</div>
+  </div>
+</div>
+
+<!-- firebase compat libs -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+<!-- app.js -->
+<script src="app.js"></script>
+
+<script>
+/*
+  Login wiring: WAIT until appLib exists (app.js ensures it) before wiring handlers.
+  This avoids "auth already declared" or "appLib undefined" issues.
+*/
+(function(){
+  const waitForAppLib = (timeout=5000)=> new Promise((resolve,reject)=>{
+    const start = Date.now();
+    (function check(){
+      if(window.appLib && window.appLib.auth && window.appLib.db) return resolve(window.appLib);
+      if(Date.now()-start>timeout) return reject(new Error('appLib not ready'));
+      setTimeout(check,50);
+    })();
+  });
+
+  waitForAppLib().then(appLib=>{
+    const auth = appLib.auth;
+    const db = appLib.db;
+    const msg = document.getElementById('msg');
+    const email = document.getElementById('email');
+    const pass = document.getElementById('pass');
+    const btnLogin = document.getElementById('btnLogin');
+    const btnRegister = document.getElementById('btnRegister');
+
+    function show(m){ msg.textContent = m; setTimeout(()=>msg.textContent='',4000); }
+
+    btnRegister.addEventListener('click', async ()=>{
+      try{
+        const e = email.value.trim(); const p = pass.value;
+        if(!e||!p) return show('Podaj email i hasło');
+        const cred = await auth.createUserWithEmailAndPassword(e,p);
+        await db.collection('users').doc(cred.user.uid).set({ email: e, role: 'user', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        show('Zarejestrowano. Możesz się zalogować.');
+      }catch(err){ console.error(err); show(err.message || err); }
+    });
+
+    btnLogin.addEventListener('click', async ()=>{
+      try{
+        const e = email.value.trim(); const p = pass.value;
+        if(!e||!p) return show('Podaj email i hasło');
+        const cred = await auth.signInWithEmailAndPassword(e,p);
+        const snap = await db.collection('users').doc(cred.user.uid).get();
+        const role = (snap.exists && snap.data().role) ? snap.data().role : 'user';
+        if(role === 'trainer') window.location.href = 'trainer.html';
+        else window.location.href = 'app.html';
+      }catch(err){ console.error(err); show(err.message || err); }
+    });
+
+    // quick redirect if already logged in
+    auth.onAuthStateChanged(async user=>{
+      if(!user) return;
+      try{
+        const snap = await db.collection('users').doc(user.uid).get();
+        const role = (snap.exists && snap.data().role) ? snap.data().role : 'user';
+        if(role === 'trainer') window.location.href = 'trainer.html';
+        else window.location.href = 'app.html';
+      }catch(e){ console.error(e); }
+    });
+  }).catch(err=>{
+    console.error('Login init error', err);
+    document.addEventListener('DOMContentLoaded', ()=>{ const el=document.getElementById('msg'); if(el) el.textContent = 'Błąd inicjalizacji aplikacji: '+err.message; });
+  });
+})();
+</script>
+</body>
+</html>
