@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>FarmazonGymApp — Trainer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="logo">
+      <div>
+        <div class="brand">FarmazonGymApp</div>
+        <div class="small">Panel trenera</div>
+      </div>
+    </div>
+    <div class="controls">
+      <div id="trainerEmail" class="small"></div>
+      <button id="btnSignOut" class="ghost">Wyloguj</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="min-width:320px;flex:1">
+        <strong>Użytkownicy</strong>
+        <div class="small muted">Szukaj po emailu, kopiuj plany i dodawaj notatki do tygodnia.</div>
+      </div>
+      <div class="row" style="min-width:260px">
+        <input id="searchUser" placeholder="Szukaj email..." />
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:10px">
+      <div class="card" style="margin-top:0">
+        <div id="usersList" class="list"></div>
+      </div>
+      <div class="card" style="margin-top:0">
+        <div id="clientArea" class="small muted">Wybierz klienta, aby zobaczyć plany i tygodnie.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">Trener — podgląd planów użytkowników + notatki (users/{uid}/notes)</div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="app.js"></script>
+<script>
+const lib = window.appLib;
+const trainerEmail = document.getElementById('trainerEmail');
+const btnSignOut = document.getElementById('btnSignOut');
+const usersList = document.getElementById('usersList');
+const clientArea = document.getElementById('clientArea');
+const searchUser = document.getElementById('searchUser');
+
+let allUsers = [];
+
+btnSignOut.addEventListener('click', ()=> lib.logout());
+
+function renderUsers(q=''){
+  usersList.innerHTML = '';
+  const users = allUsers
+    .filter(u=>u.role !== 'trainer')
+    .filter(u=> q ? String(u.email||'').toLowerCase().includes(q.toLowerCase()) : true);
+
+  if(users.length===0){
+    usersList.innerHTML = '<div class="small muted">Brak wyników</div>';
+    return;
+  }
+
+  users.forEach(u=>{
+    const div = document.createElement('div');
+    div.className='row';
+    div.style.justifyContent='space-between';
+    div.innerHTML = `<div style="flex:1">
+      <strong>${lib.esc(u.email||u.id)}</strong>
+      <div class="small muted">${lib.esc(u.id)}</div>
+    </div>
+    <button class="ghost">Otwórz</button>`;
+    div.querySelector('button').addEventListener('click', ()=> openClient(u.id, u.email||u.id));
+    usersList.appendChild(div);
+  });
+}
+
+searchUser.addEventListener('input', ()=> renderUsers(searchUser.value.trim()));
+
+async function loadUsers(){
+  usersList.innerHTML = '<div class="small muted">Ładowanie…</div>';
+  const snap = await lib.db.collection('users').limit(300).get();
+  allUsers = [];
+  snap.forEach(d=>{ const data = d.data(); data.id=d.id; allUsers.push(data); });
+  renderUsers('');
+}
+
+async function openClient(uid, emailLabel){
+  clientArea.innerHTML = '<div class="small muted">Ładowanie planów…</div>';
+  const plansSnap = await lib.db.collection('users').doc(uid).collection('plans').orderBy('createdAt','desc').get();
+  const plans = [];
+  plansSnap.forEach(d=>{ const data=d.data(); data.id=d.id; plans.push(data); });
+
+  let html = `<h2 style="margin:0 0 8px 0">Klient: ${lib.esc(emailLabel)}</h2>`;
+  html += `<div class="small muted">Notatki zapisują się w users/${uid}/notes</div>`;
+  html += `<hr class="sep" />`;
+
+  if(plans.length===0){
+    clientArea.innerHTML = html + '<div class="small muted">Brak planów.</div>';
+    return;
+  }
+
+  html += plans.map(p=>{
+    const weeks = (p.weeks||[]);
+    const weekRows = weeks.map(w=>{
+      const wid = w.id;
+      return `<tr>
+        <td>${lib.esc(w.title||wid)}</td>
+        <td><button class="ghost" data-act="note" data-wid="${wid}" data-pid="${p.id}">Notatka</button></td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="card" style="margin-top:12px">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:900;font-size:18px">${lib.esc(p.title)}</div>
+          <div class="small muted">${weeks.length} tyg.</div>
+        </div>
+        <button class="ghost" data-act="copy" data-pid="${p.id}">Skopiuj plan (duplikat)</button>
+      </div>
+      <div style="margin-top:10px">
+        <table class="table">
+          <thead><tr><th>Tydzień</th><th>Akcja</th></tr></thead>
+          <tbody>${weekRows || `<tr><td colspan="2" class="small muted">Brak tygodni</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  clientArea.innerHTML = html;
+
+  clientArea.querySelectorAll('[data-act="copy"]').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      const pid = e.currentTarget.dataset.pid;
+      const planDoc = await lib.db.collection('users').doc(uid).collection('plans').doc(pid).get();
+      if(!planDoc.exists) return alert('Nie znaleziono planu');
+      const plan = planDoc.data();
+      plan.id = lib.uid('plan');
+      plan.title = (plan.title||'Plan') + ' (kopia)';
+      plan.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await lib.db.collection('users').doc(uid).collection('plans').doc(plan.id).set(plan);
+      lib.showToast('✅ Skopiowano plan');
+      openClient(uid, emailLabel);
+    });
+  });
+
+  clientArea.querySelectorAll('[data-act="note"]').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      const wid = e.currentTarget.dataset.wid;
+      const pid = e.currentTarget.dataset.pid;
+      const ref = lib.db.collection('users').doc(uid).collection('notes').doc(pid + '__' + wid);
+      const snap = await ref.get();
+      const existing = snap.exists ? (snap.data().text||'') : '';
+      const text = prompt('Notatka trenera do tygodnia:', existing);
+      if(text===null) return;
+      await ref.set({ planId:pid, weekId:wid, text, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true });
+      lib.showToast('💾 Zapisano notatkę');
+    });
+  });
+}
+
+lib.auth.onAuthStateChanged(async user=>{
+  if(!user){ window.location.href='login.html'; return; }
+  trainerEmail.textContent = user.email;
+
+  const role = await lib.getUserRole(user.uid);
+  if(role !== 'trainer'){ alert('Brak uprawnień trenera'); window.location.href='app.html'; return; }
+
+  await loadUsers();
+});
+</script>
+</body>
+</html>
