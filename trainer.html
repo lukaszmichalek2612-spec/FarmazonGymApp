@@ -1,0 +1,113 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FarmazonGymApp — Trainer</title><link rel="stylesheet" href="style.css"></head>
+<body><div class="container">
+<div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+  <div><div style="font-weight:900;font-size:20px">FarmazonGymApp</div><div class="small">Tryb: Trener</div></div>
+  <div class="controls"><button id="btnUserMode" class="ghost">Tryb użytkownika</button><div id="trainerEmail" class="small"></div><button id="btnSignOut" class="ghost">Wyloguj</button></div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div><div style="font-weight:900">Klienci</div><div class="small">Podgląd + kopiuj plan + notatki</div></div>
+    <input id="searchUser" placeholder="Szukaj email…" style="max-width:320px">
+  </div>
+  <div class="grid" style="margin-top:10px">
+    <div class="card" style="margin-top:0"><div id="usersList" class="list"></div></div>
+    <div class="card" style="margin-top:0"><div id="clientArea" class="small">Wybierz klienta.</div></div>
+  </div>
+</div>
+<div class="footer">Trener — PRO v3</div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="app.js"></script>
+<script>
+const lib=appLib;
+const trainerEmail=document.getElementById('trainerEmail'), btnSignOut=document.getElementById('btnSignOut'), btnUserMode=document.getElementById('btnUserMode');
+const usersList=document.getElementById('usersList'), clientArea=document.getElementById('clientArea'), searchUser=document.getElementById('searchUser');
+let allUsers=[];
+btnSignOut.onclick=()=>lib.logout();
+btnUserMode.onclick=()=>{localStorage.setItem('fg_mode','user'); location.href='app.html';};
+function renderUsers(q=''){
+  usersList.innerHTML='';
+  const users=allUsers.filter(u=>u.role!=='trainer').filter(u=>q?String(u.email||'').toLowerCase().includes(q.toLowerCase()):true);
+  if(!users.length){usersList.innerHTML='<div class="small">Brak wyników</div>'; return;}
+  users.forEach(u=>{
+    const div=document.createElement('div'); div.className='row'; div.style.justifyContent='space-between';
+    div.innerHTML=`<div style="flex:1;min-width:0"><div style="font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lib.esc(u.email||u.id)}</div><div class="small">${lib.esc(u.id)}</div></div><button class="ghost">Otwórz</button>`;
+    div.querySelector('button').onclick=()=>openClient(u.id,u.email||u.id);
+    usersList.appendChild(div);
+  });
+}
+searchUser.oninput=()=>renderUsers(searchUser.value.trim());
+async function loadUsers(){
+  usersList.innerHTML='<div class="small">Ładowanie…</div>';
+  const snap=await lib.db.collection('users').limit(400).get();
+  allUsers=[]; snap.forEach(d=>{const data=d.data(); data.id=d.id; allUsers.push(data);});
+  renderUsers('');
+}
+async function fetchPlansOnce(uid){
+  const snap=await lib.db.collection('users').doc(uid).collection('plans').orderBy('createdAt','desc').get();
+  const out=[]; snap.forEach(d=>{const data=d.data(); data.id=d.id; out.push(data);}); return out;
+}
+async function openClient(uid,emailLabel){
+  clientArea.innerHTML='<div class="small">Ładowanie…</div>';
+  const plans=await fetchPlansOnce(uid);
+  const logs=await lib.fetchWorkoutLogs(uid,'1970-01-01','2999-12-31',12);
+  let html=`<div style="font-weight:900;font-size:18px">Klient: ${lib.esc(emailLabel)}</div><hr class="sep"/>`;
+  html+=`<div class="details"><div style="font-weight:900">Ostatnie treningi</div>`;
+  if(!logs.length) html+=`<div class="small" style="margin-top:8px">Brak wpisów</div>`;
+  else{
+    html+=`<table class="table" style="margin-top:8px"><thead><tr><th>Data</th><th>Trening</th><th>Objętość</th></tr></thead><tbody>`;
+    logs.forEach(l=>{html+=`<tr><td>${lib.esc(l.date||'')}</td><td>${lib.esc(l.trainingTitle||'')}</td><td>${Math.round(lib.calcLogVolume(l)).toLocaleString('pl-PL')} kg</td></tr>`;});
+    html+=`</tbody></table>`;
+  }
+  html+=`</div>`;
+  if(!plans.length){clientArea.innerHTML=html+`<div class="small">Brak planów</div>`; return;}
+  html+=plans.map(p=>{
+    const weeks=p.weeks||[];
+    const rows=weeks.map(w=>`<tr><td>${lib.esc(w.title||w.id)}</td><td><button class="ghost" data-note="${p.id}__${w.id}">Notatka</button></td></tr>`).join('');
+    return `<div class="card" style="margin-top:12px">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div><div style="font-weight:900">${lib.esc(p.title)}</div><div class="small">${weeks.length} tyg.</div></div>
+        <button class="ghost" data-copy="${p.id}">Skopiuj plan</button>
+      </div>
+      <table class="table" style="margin-top:10px"><thead><tr><th>Tydzień</th><th>Akcja</th></tr></thead><tbody>${rows||`<tr><td colspan="2" class="small">Brak tygodni</td></tr>`}</tbody></table>
+    </div>`;
+  }).join('');
+  clientArea.innerHTML=html;
+
+  clientArea.querySelectorAll('[data-copy]').forEach(b=>{
+    b.onclick=async(e)=>{
+      const pid=e.currentTarget.getAttribute('data-copy');
+      const doc=await lib.db.collection('users').doc(uid).collection('plans').doc(pid).get();
+      if(!doc.exists) return alert('Nie znaleziono planu');
+      const plan=doc.data(); plan.id=lib.uid('plan'); plan.title=(plan.title||'Plan')+' (kopia)'; plan.createdAt=firebase.firestore.FieldValue.serverTimestamp();
+      await lib.db.collection('users').doc(uid).collection('plans').doc(plan.id).set(plan);
+      lib.showToast('✅ Skopiowano'); openClient(uid,emailLabel);
+    };
+  });
+  clientArea.querySelectorAll('[data-note]').forEach(b=>{
+    b.onclick=async(e)=>{
+      const key=e.currentTarget.getAttribute('data-note');
+      const [pid,wid]=key.split('__');
+      const ref=lib.db.collection('users').doc(uid).collection('notes').doc(key);
+      const snap=await ref.get(); const existing=snap.exists?(snap.data().text||''):'';
+      const text=prompt('Notatka:', existing); if(text===null) return;
+      await ref.set({planId:pid,weekId:wid,text,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+      lib.showToast('💾 Zapisano');
+    };
+  });
+}
+
+lib.auth.onAuthStateChanged(async user=>{
+  if(!user){location.href='login.html'; return;}
+  trainerEmail.textContent=user.email;
+  const role=await lib.getUserRole(user.uid);
+  if(role!=='trainer'){alert('Brak uprawnień'); location.href='app.html'; return;}
+  localStorage.setItem('fg_mode','trainer');
+  await loadUsers();
+});
+</script></body></html>

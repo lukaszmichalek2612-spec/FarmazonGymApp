@@ -1,0 +1,394 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FarmazonGymApp — PRO v3</title><link rel="stylesheet" href="style.css"></head>
+<body><div class="container">
+<div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+  <div><div style="font-weight:900;font-size:20px">FarmazonGymApp</div><div id="modeLabel" class="small">Tryb: Użytkownik</div></div>
+  <div class="controls">
+    <div class="tabs" id="topTabs"></div>
+    <button id="btnCalculators" class="ghost">Kalkulatory</button>
+    <button id="btnMode" class="ghost" style="display:none">Tryb trenera</button>
+    <div id="userEmail" class="small"></div>
+    <button id="btnSignOut" class="ghost">Wyloguj</button>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card" style="margin-top:0">
+    <div class="row" style="justify-content:space-between">
+      <div><div style="font-weight:900;font-size:18px">Plany</div><div class="small">Plan → tydzień → trening</div></div>
+      <button id="btnAddPlan" class="button">➕</button>
+    </div>
+    <div id="plansList" class="list" style="margin-top:10px"></div>
+    <hr class="sep"/><div class="small">Autosave: zawsze ON</div>
+  </div>
+
+  <div class="card" style="margin-top:0">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div><div id="planTitle" style="font-weight:900;font-size:20px">Wybierz plan</div><div id="planDesc" class="small">—</div></div>
+      <div class="row" style="flex-wrap:wrap">
+        <select id="trainingSelect" style="min-width:240px"></select>
+        <button id="btnAddTraining" class="button">➕ Trening</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:10px;align-items:center">
+      <span class="small">Tydzień:</span>
+      <select id="weekSelect" style="width:240px"></select>
+      <button id="btnAddWeek" class="button">➕ Tydzień</button>
+      <button id="btnDupWeek" class="ghost">Duplikuj</button>
+      <button id="btnDelWeek" class="ghost danger">Usuń</button>
+      <div class="badge" id="saveState">Autosave: ON</div>
+    </div>
+    <hr class="sep"/>
+
+    <div id="panel_plan" class="panel active">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div><div style="font-weight:900">Plan</div><div class="small">Edycja ćwiczeń + serie</div></div>
+        <button id="btnStartWorkout" class="button">▶ Zapisz do dziennika</button>
+      </div>
+      <div id="trainingArea" class="list" style="margin-top:12px"></div>
+    </div>
+
+    <div id="panel_log" class="panel">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div><div style="font-weight:900">Dziennik</div><div class="small">Twoje treningi</div></div>
+        <div class="row" style="flex-wrap:wrap">
+          <input id="logFrom" type="date" style="max-width:190px"/>
+          <input id="logTo" type="date" style="max-width:190px"/>
+          <button id="btnRefreshLogs" class="ghost">Odśwież</button>
+        </div>
+      </div>
+      <div id="logsList" class="list" style="margin-top:12px"></div>
+    </div>
+
+    <div id="panel_progress" class="panel">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div><div style="font-weight:900">Progres</div><div class="small">Wykres e1RM</div></div>
+        <div class="row" style="flex-wrap:wrap">
+          <select id="progressExercise" style="min-width:240px"></select>
+          <button id="btnDrawProgress" class="ghost">Pokaż</button>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <canvas id="progressCanvas" width="900" height="260"></canvas>
+        <div id="progressMeta" class="small" style="margin-top:8px">Wybierz ćwiczenie.</div>
+      </div>
+    </div>
+
+    <div id="panel_library" class="panel">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div><div style="font-weight:900">Biblioteka</div><div class="small">Ulubione ★</div></div>
+        <div class="row" style="flex-wrap:wrap">
+          <input id="libSearch" placeholder="Szukaj…" style="min-width:240px"/>
+          <button id="btnAddLibraryEx" class="button">➕ Dodaj</button>
+        </div>
+      </div>
+      <div id="libList" class="list" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">FarmazonGymApp — PRO v3</div>
+</div>
+
+<div id="modalBackdrop" class="modalBackdrop"><div class="modal">
+  <div class="modalHeader"><div><div style="font-weight:900">Kalkulatory</div><div class="small">1RM/BMI/BMR/Talerze</div></div><button id="btnCloseModal" class="ghost">Zamknij</button></div>
+  <div class="modalBody"><div class="tabs" id="calcTabs"></div><div id="calcBody" style="margin-top:10px"></div></div>
+</div></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="app.js"></script>
+<script>
+const lib=appLib;
+const userEmail=document.getElementById('userEmail'), btnSignOut=document.getElementById('btnSignOut');
+const plansList=document.getElementById('plansList'), btnAddPlan=document.getElementById('btnAddPlan');
+const planTitle=document.getElementById('planTitle'), planDesc=document.getElementById('planDesc');
+const trainingSelect=document.getElementById('trainingSelect'), btnAddTraining=document.getElementById('btnAddTraining');
+const weekSelect=document.getElementById('weekSelect'), btnAddWeek=document.getElementById('btnAddWeek');
+const btnDupWeek=document.getElementById('btnDupWeek'), btnDelWeek=document.getElementById('btnDelWeek');
+const trainingArea=document.getElementById('trainingArea'), saveState=document.getElementById('saveState');
+const btnStartWorkout=document.getElementById('btnStartWorkout');
+const topTabs=document.getElementById('topTabs');
+const logFrom=document.getElementById('logFrom'), logTo=document.getElementById('logTo'), btnRefreshLogs=document.getElementById('btnRefreshLogs'), logsList=document.getElementById('logsList');
+const progressExercise=document.getElementById('progressExercise'), btnDrawProgress=document.getElementById('btnDrawProgress'), progressCanvas=document.getElementById('progressCanvas'), progressMeta=document.getElementById('progressMeta');
+const libSearch=document.getElementById('libSearch'), btnAddLibraryEx=document.getElementById('btnAddLibraryEx'), libList=document.getElementById('libList');
+const btnCalculators=document.getElementById('btnCalculators'), btnMode=document.getElementById('btnMode'), modeLabel=document.getElementById('modeLabel');
+const modalBackdrop=document.getElementById('modalBackdrop'), btnCloseModal=document.getElementById('btnCloseModal'), calcTabs=document.getElementById('calcTabs'), calcBody=document.getElementById('calcBody');
+
+let currentUser=null, currentRole='user', unsubPlans=null, unsubLib=null;
+let state={plans:[],activePlanId:null,activeWeekId:null,library:[]};
+
+function setSaving(s){saveState.textContent=s?'Zapisuję…':'Autosave: ON';saveState.style.opacity=s?0.8:1;}
+btnSignOut.onclick=()=>lib.logout();
+function todayISO(){const d=new Date();return d.toISOString().slice(0,10);}
+function safeNumber(v){const n=Number(v);return Number.isFinite(n)?n:0;}
+function getActivePlan(){return state.plans.find(p=>p.id===state.activePlanId)||null;}
+function getActiveWeek(p){return p?(p.weeks||[]).find(w=>w.id===state.activeWeekId)||null:null;}
+
+// Tabs
+const panels={plan:document.getElementById('panel_plan'),log:document.getElementById('panel_log'),progress:document.getElementById('panel_progress'),library:document.getElementById('panel_library')};
+const tabDefs=[{id:'plan',label:'Plan'},{id:'log',label:'Dziennik'},{id:'progress',label:'Progres'},{id:'library',label:'Biblioteka'}];
+function setActivePanel(id){
+  Object.keys(panels).forEach(k=>panels[k].classList.toggle('active',k===id));
+  [...topTabs.querySelectorAll('.tab')].forEach(b=>b.classList.toggle('active',b.dataset.id===id));
+  if(id==='log')refreshLogs();
+  if(id==='progress')refreshProgressExercises();
+  if(id==='library')renderLibrary();
+}
+function renderTopTabs(){
+  topTabs.innerHTML='';
+  tabDefs.forEach(t=>{
+    const b=document.createElement('button');b.className='tab'+(t.id==='plan'?' active':'');b.dataset.id=t.id;b.textContent=t.label;
+    b.onclick=()=>setActivePanel(t.id);topTabs.appendChild(b);
+  });
+}
+renderTopTabs();
+
+function renderPlans(){
+  plansList.innerHTML='';
+  if(!state.plans.length){plansList.innerHTML='<div class="small">Brak planów</div>';return;}
+  state.plans.forEach(p=>{
+    const div=document.createElement('div');div.className='row';div.style.justifyContent='space-between';
+    div.innerHTML=`<div style="flex:1;min-width:0"><div style="font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lib.esc(p.title)}</div><div class="small">${(p.weeks||[]).length} tyg.</div></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><button class="ghost open">Otwórz</button><button class="ghost danger del">🗑️</button></div>`;
+    div.querySelector('.open').onclick=()=>{state.activePlanId=p.id;state.activeWeekId=(p.weeks&&p.weeks[0])?p.weeks[0].id:null;renderAll();};
+    div.querySelector('.del').onclick=async()=>{if(!confirm('Usunąć plan?'))return;await lib.deletePlan(currentUser.uid,p.id);lib.showToast('🗑️ Usunięto plan');};
+    plansList.appendChild(div);
+  });
+}
+function renderHeader(){
+  const p=getActivePlan(); trainingSelect.innerHTML=''; weekSelect.innerHTML='';
+  if(!p){planTitle.textContent='Wybierz plan';planDesc.textContent='—';return;}
+  planTitle.textContent=p.title; planDesc.textContent=p.desc||'';
+  (p.trainings||[]).forEach(t=>{const o=document.createElement('option');o.value=t.id;o.textContent=t.title;trainingSelect.appendChild(o);});
+  (p.weeks||[]).forEach(w=>{const o=document.createElement('option');o.value=w.id;o.textContent=w.title;weekSelect.appendChild(o);});
+  if(!state.activeWeekId && p.weeks&&p.weeks.length) state.activeWeekId=p.weeks[0].id;
+  weekSelect.value=state.activeWeekId||'';
+}
+function renderTrainingArea(){
+  trainingArea.innerHTML='';
+  const p=getActivePlan(); if(!p){trainingArea.innerHTML='<div class="small">Wybierz plan.</div>';return;}
+  const w=getActiveWeek(p); if(!w){trainingArea.innerHTML='<div class="small">Dodaj tydzień.</div>';return;}
+  lib.ensureWeekData(p,w);
+  (w.data.trainings||[]).forEach(tr=>{
+    const det=document.createElement('details');det.className='details';det.open=true;
+    det.innerHTML=`<summary><div><strong>${lib.esc(tr.title)}</strong> <span class="badge">${Math.round(lib.calcTrainingVolume(tr)).toLocaleString('pl-PL')} kg</span></div><div class="small">zwiń</div></summary><div class="body"></div>`;
+    const body=det.querySelector('.body'); body.style.marginTop='10px';
+    (tr.exercises||[]).forEach(ex=>{
+      const exBox=document.createElement('div');exBox.className='details';
+      exBox.innerHTML=`<div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div style="min-width:240px"><div style="font-weight:900">${lib.esc(ex.name)} <span class="badge">${Math.round(lib.calcExerciseVolume(ex)).toLocaleString('pl-PL')} kg</span></div>
+        <div class="small">${ex.sets||''} s • ${ex.reps||''}</div></div>
+        <div class="row" style="flex-wrap:wrap"><button class="ghost fav">★</button><button class="ghost addset">➕ Seria</button><button class="ghost danger del">Usuń</button></div></div>
+        <table class="table" style="margin-top:10px"><thead><tr><th>#</th><th>KG</th><th>Powt.</th><th>✅</th><th></th></tr></thead><tbody></tbody></table>`;
+      ex.series=ex.series||[];
+      const tb=exBox.querySelector('tbody');
+      if(!ex.series.length){tb.innerHTML='<tr><td colspan="5" class="small">Brak serii</td></tr>';}
+      else ex.series.forEach((s,i)=>{
+        const trr=document.createElement('tr'); if(s.done) trr.classList.add('done');
+        trr.innerHTML=`<td>${i+1}</td><td><input data-f="weight" data-id="${s.id}" value="${s.weight??''}" style="max-width:100px"></td>
+        <td><input data-f="reps" data-id="${s.id}" value="${s.reps??''}" style="max-width:100px"></td>
+        <td><input type="checkbox" data-f="done" data-id="${s.id}" ${s.done?'checked':''}></td>
+        <td><button class="ghost danger" data-del="${s.id}">Usuń</button></td>`;
+        tb.appendChild(trr);
+      });
+      exBox.querySelectorAll('input[data-f]').forEach(inp=>{
+        inp.onchange=async(e)=>{
+          const sid=e.target.dataset.id, f=e.target.dataset.f;
+          const sObj=ex.series.find(x=>x.id===sid); if(!sObj) return;
+          if(f==='done') sObj.done=!!e.target.checked;
+          else {const v=e.target.value.trim(); sObj[f]=v===''?'':Number(v);}
+          setSaving(true); await lib.autosave(currentUser.uid,p); setSaving(false); renderTrainingArea();
+        };
+      });
+      exBox.querySelectorAll('button[data-del]').forEach(b=>{
+        b.onclick=async(e)=>{const sid=e.currentTarget.getAttribute('data-del'); ex.series=ex.series.filter(x=>x.id!==sid); setSaving(true); await lib.autosave(currentUser.uid,p); setSaving(false); renderTrainingArea();};
+      });
+      exBox.querySelector('.addset').onclick=async()=>{ex.series.push({id:lib.uid('s'),weight:'',reps:'',done:false}); setSaving(true); await lib.autosave(currentUser.uid,p); setSaving(false); renderTrainingArea();};
+      exBox.querySelector('.del').onclick=async()=>{if(!confirm('Usunąć ćwiczenie?'))return; tr.exercises=tr.exercises.filter(x=>x.id!==ex.id); setSaving(true); await lib.autosave(currentUser.uid,p); setSaving(false); renderTrainingArea();};
+      exBox.querySelector('.fav').onclick=async()=>{await lib.upsertLibraryExercise(currentUser.uid,{name:ex.name,favorite:true}); lib.showToast('★ Ulubione'); await refreshLibrary(); renderLibrary();};
+      body.appendChild(exBox);
+    });
+    const addBox=document.createElement('div');addBox.className='details';
+    const items=[...(state.library||[])].sort((a,b)=>(b.favorite?1:0)-(a.favorite?1:0)||String(a.name||'').localeCompare(String(b.name||'')));
+    addBox.innerHTML=`<div style="font-weight:900">Dodaj ćwiczenie</div>
+      <div class="row" style="margin-top:10px;flex-wrap:wrap">
+        <select class="pick" style="min-width:260px"><option value="">— z biblioteki —</option>${items.map(x=>`<option value="${lib.esc(x.name)}">${x.favorite?'★ ':''}${lib.esc(x.name)}</option>`).join('')}</select>
+        <input class="name" placeholder="lub wpisz nazwę…" style="min-width:260px">
+        <input class="sets" placeholder="Serie" style="max-width:140px">
+        <input class="reps" placeholder="Powt." style="max-width:160px">
+        <button class="button add">Dodaj</button>
+      </div>`;
+    const pick=addBox.querySelector('.pick'); pick.onchange=()=>{if(pick.value) addBox.querySelector('.name').value=pick.value;};
+    addBox.querySelector('.add').onclick=async()=>{
+      const name=addBox.querySelector('.name').value.trim(); if(!name) return lib.showToast('Podaj nazwę');
+      const sets=safeNumber(addBox.querySelector('.sets').value||3)||3; const reps=(addBox.querySelector('.reps').value||'8-12').trim();
+      tr.exercises=tr.exercises||[]; tr.exercises.push({id:lib.uid('ex'),name,sets,reps,tempo:'2010',rest:'1:00',series:[]});
+      await lib.upsertLibraryExercise(currentUser.uid,{name,favorite:false});
+      setSaving(true); await lib.autosave(currentUser.uid,p); setSaving(false);
+      lib.showToast('✅ Dodano'); await refreshLibrary(); renderTrainingArea();
+    };
+    body.appendChild(addBox);
+    trainingArea.appendChild(det);
+  });
+}
+function renderAll(){renderPlans();renderHeader();renderTrainingArea();}
+
+btnAddPlan.onclick=async()=>{const title=prompt('Nazwa planu','Mój plan'); if(!title) return; await lib.createPlan(currentUser.uid,{id:lib.uid('plan'),title:title.trim(),desc:'',trainings:[],weeks:[]}); lib.showToast('✅ Dodano plan');};
+btnAddTraining.onclick=async()=>{const p=getActivePlan(); if(!p) return lib.showToast('Wybierz plan'); const name=prompt('Nazwa treningu','Trening A'); if(!name) return;
+  p.trainings=p.trainings||[]; const tr={id:lib.uid('tr'),title:name.trim(),exercises:[]}; p.trainings.push(tr);
+  (p.weeks||[]).forEach(w=>{lib.ensureWeekData(p,w); w.data.trainings.push(lib.clone(tr));});
+  setSaving(true); await lib.autosave(currentUser.uid,p); setSaving(false); renderAll();
+};
+btnAddWeek.onclick=async()=>{const p=getActivePlan(); if(!p) return lib.showToast('Wybierz plan'); const name=prompt('Nazwa tygodnia','Tydzień '+((p.weeks||[]).length+1)); if(!name) return;
+  const wk={id:lib.uid('wk'),title:name.trim(),data:{trainings:lib.clone(p.trainings||[])}}; p.weeks=p.weeks||[]; p.weeks.push(wk); state.activeWeekId=wk.id;
+  setSaving(true); await lib.autosave(currentUser.uid,p); setSaving(false); renderAll();
+};
+btnDupWeek.onclick=async()=>{const p=getActivePlan(); const w=getActiveWeek(p); if(!p||!w) return; const c=lib.clone(w); c.id=lib.uid('wk'); c.title=(w.title||'Tydzień')+' (kopia)'; p.weeks.push(c); state.activeWeekId=c.id;
+  setSaving(true); await lib.autosave(currentUser.uid,p); setSaving(false); renderAll();
+};
+btnDelWeek.onclick=async()=>{const p=getActivePlan(); if(!p||!state.activeWeekId) return; if(!confirm('Usunąć tydzień?')) return;
+  p.weeks=(p.weeks||[]).filter(w=>w.id!==state.activeWeekId); state.activeWeekId=(p.weeks[0]?p.weeks[0].id:null);
+  setSaving(true); await lib.autosave(currentUser.uid,p); setSaving(false); renderAll();
+};
+weekSelect.onchange=(e)=>{state.activeWeekId=e.target.value; renderTrainingArea();};
+
+// Logging
+btnStartWorkout.onclick=async()=>{
+  const p=getActivePlan(), w=getActiveWeek(p); if(!p||!w) return lib.showToast('Wybierz plan i tydzień');
+  lib.ensureWeekData(p,w);
+  const trId=trainingSelect.value || (w.data.trainings[0]?w.data.trainings[0].id:null);
+  const tr=(w.data.trainings||[]).find(t=>t.id===trId)||w.data.trainings[0]; if(!tr) return lib.showToast('Dodaj trening');
+  const entries=[];
+  (tr.exercises||[]).forEach(ex=>{(ex.series||[]).forEach((s,idx)=>{if(s.weight===''||s.reps==='') return; entries.push({exercise:ex.name,setNo:idx+1,weight:safeNumber(s.weight),reps:safeNumber(s.reps),done:!!s.done});});});
+  if(!entries.length) return lib.showToast('Wpisz choć 1 serię (kg+powt.)');
+  await lib.addWorkoutLog(currentUser.uid,{date:todayISO(),planId:p.id,weekId:w.id,trainingId:tr.id,trainingTitle:tr.title,entries,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+  lib.showToast('✅ Zapisano w dzienniku'); setActivePanel('log');
+};
+
+// Logs
+function setDefaultRange(){const to=new Date(); const from=new Date(); from.setDate(from.getDate()-30); logFrom.value=from.toISOString().slice(0,10); logTo.value=to.toISOString().slice(0,10);}
+setDefaultRange();
+btnRefreshLogs.onclick=()=>refreshLogs();
+async function refreshLogs(){
+  logsList.innerHTML='<div class="small">Ładowanie…</div>';
+  const logs=await lib.fetchWorkoutLogs(currentUser.uid,logFrom.value||'1970-01-01',logTo.value||'2999-12-31',80);
+  if(!logs.length){logsList.innerHTML='<div class="small">Brak wpisów.</div>'; return;}
+  logsList.innerHTML='';
+  logs.forEach(l=>{
+    const det=document.createElement('details'); det.className='details'; det.open=false;
+    const vol=Math.round(lib.calcLogVolume(l)).toLocaleString('pl-PL');
+    det.innerHTML=`<summary><div><strong>${lib.esc(l.date||'')}</strong> — ${lib.esc(l.trainingTitle||'')} <span class="badge">${vol} kg</span></div><div class="small">szczegóły</div></summary>
+      <div style="margin-top:10px"><table class="table"><thead><tr><th>Ćwiczenie</th><th>kg</th><th>powt.</th><th>e1RM</th></tr></thead><tbody></tbody></table>
+      <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="ghost danger del">Usuń</button></div></div>`;
+    const tb=det.querySelector('tbody');
+    (l.entries||[]).forEach(e=>{const e1=Math.round(lib.oneRm.epley(e.weight,e.reps)); const trr=document.createElement('tr'); trr.innerHTML=`<td>${lib.esc(e.exercise)}</td><td>${e.weight}</td><td>${e.reps}</td><td>${e1}</td>`; tb.appendChild(trr);});
+    det.querySelector('.del').onclick=async()=>{if(!confirm('Usunąć wpis?'))return; await lib.deleteWorkoutLog(currentUser.uid,l.id); lib.showToast('🗑️ Usunięto'); refreshLogs();};
+    logsList.appendChild(det);
+  });
+}
+
+// Progress
+btnDrawProgress.onclick=()=>drawProgress();
+async function refreshProgressExercises(){
+  progressExercise.innerHTML='<option value="">— wybierz ćwiczenie —</option>';
+  const names=new Set((state.library||[]).map(x=>x.name).filter(Boolean));
+  const logs=await lib.fetchWorkoutLogs(currentUser.uid,'1970-01-01','2999-12-31',120);
+  logs.forEach(l=>(l.entries||[]).forEach(e=>names.add(e.exercise)));
+  [...names].sort((a,b)=>a.localeCompare(b)).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;progressExercise.appendChild(o);});
+}
+async function drawProgress(){
+  const name=progressExercise.value; if(!name) return;
+  progressMeta.textContent='Ładowanie…';
+  const pts=await lib.fetchExerciseProgress(currentUser.uid,name,365);
+  renderLine(progressCanvas,pts,name);
+  progressMeta.textContent=pts.length?`Punktów: ${pts.length} • Ostatni: ${pts[pts.length-1].date} • e1RM: ${Math.round(pts[pts.length-1].value)} kg`:'Brak danych';
+}
+function renderLine(canvas,pts,label){
+  const ctx=canvas.getContext('2d'); const W=canvas.width,H=canvas.height; ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='rgba(255,255,255,0.02)'; ctx.fillRect(0,0,W,H);
+  const pad=38, plotW=W-pad*2, plotH=H-pad*2;
+  ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,H-pad); ctx.lineTo(W-pad,H-pad); ctx.stroke();
+  ctx.fillStyle='rgba(230,238,248,0.95)'; ctx.font='700 16px Inter,system-ui,Arial'; ctx.fillText(label,pad,22);
+  if(!pts.length){ctx.fillStyle='rgba(147,164,184,0.9)'; ctx.font='600 13px Inter,system-ui,Arial'; ctx.fillText('Brak danych',pad,pad+20); return;}
+  const xs=pts.map(p=>new Date(p.date).getTime()), ys=pts.map(p=>p.value);
+  const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
+  const spanX=Math.max(1,maxX-minX), spanY=Math.max(1,maxY-minY);
+  const X=t=>pad+((t-minX)/spanX)*plotW, Y=v=>(H-pad)-((v-minY)/spanY)*plotH;
+  ctx.strokeStyle='rgba(255,255,255,0.08)'; for(let i=1;i<=4;i++){const y=pad+(plotH*i/5); ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(W-pad,y); ctx.stroke();}
+  ctx.strokeStyle='rgba(96,165,250,0.95)'; ctx.lineWidth=2; ctx.beginPath();
+  pts.forEach((p,i)=>{const x=X(new Date(p.date).getTime()), y=Y(p.value); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);}); ctx.stroke();
+  ctx.fillStyle='rgba(6,182,212,0.95)'; pts.forEach(p=>{const x=X(new Date(p.date).getTime()), y=Y(p.value); ctx.beginPath(); ctx.arc(x,y,3.5,0,Math.PI*2); ctx.fill();});
+}
+
+// Library
+libSearch.oninput=()=>renderLibrary();
+btnAddLibraryEx.onclick=async()=>{const name=prompt('Nazwa ćwiczenia','Wyciskanie sztangi'); if(!name) return; await lib.upsertLibraryExercise(currentUser.uid,{name:name.trim(),favorite:false}); lib.showToast('✅ Dodano'); await refreshLibrary(); renderLibrary();};
+async function refreshLibrary(){const items=await lib.fetchLibrary(currentUser.uid); state.library=items; return items;}
+function renderLibrary(){
+  const q=(libSearch.value||'').trim().toLowerCase();
+  const items=[...(state.library||[])].sort((a,b)=>(b.favorite?1:0)-(a.favorite?1:0)||String(a.name||'').localeCompare(String(b.name||'')));
+  const filtered=q?items.filter(x=>String(x.name||'').toLowerCase().includes(q)):items;
+  libList.innerHTML='';
+  if(!filtered.length){libList.innerHTML='<div class="small">Brak ćwiczeń. Dodaj własne albo dodaj z planu.</div>'; return;}
+  filtered.forEach(x=>{
+    const div=document.createElement('div'); div.className='row'; div.style.justifyContent='space-between';
+    div.innerHTML=`<div style="flex:1;min-width:0"><div style="font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${x.favorite?'★ ':''}${lib.esc(x.name)}</div><div class="small">${lib.esc(x.updatedAtText||'')}</div></div>
+    <div class="row" style="flex-wrap:wrap"><button class="ghost fav">${x.favorite?'★':'☆'}</button><button class="ghost danger del">Usuń</button></div>`;
+    div.querySelector('.fav').onclick=async()=>{await lib.upsertLibraryExercise(currentUser.uid,{name:x.name,favorite:!x.favorite}); await refreshLibrary(); renderLibrary();};
+    div.querySelector('.del').onclick=async()=>{if(!confirm('Usunąć z biblioteki?'))return; await lib.deleteLibraryExercise(currentUser.uid,x.id); await refreshLibrary(); renderLibrary();};
+    libList.appendChild(div);
+  });
+}
+
+// Calculators modal (simple)
+const calculators=[
+ {id:'1rm',name:'1RM',render:()=>{calcBody.innerHTML=`<div class="row" style="flex-wrap:wrap"><input id="w" placeholder="kg" style="max-width:200px"><input id="r" placeholder="powt." style="max-width:200px"><select id="m" style="max-width:220px"><option value="epley">Epley</option><option value="brzycki">Brzycki</option><option value="lombardi">Lombardi</option></select><div class="badge" id="out">—</div></div>`;
+   const w=document.getElementById('w'), r=document.getElementById('r'), m=document.getElementById('m'), out=document.getElementById('out');
+   const upd=()=>{const ww=Number(w.value||0), rr=Number(r.value||0); if(!ww||!rr) return out.textContent='—'; out.textContent=Math.round((lib.oneRm[m.value]||lib.oneRm.epley)(ww,rr))+' kg';};
+   w.oninput=upd; r.oninput=upd; m.onchange=upd;
+ }},
+ {id:'bmi',name:'BMI',render:()=>{calcBody.innerHTML=`<div class="row" style="flex-wrap:wrap"><input id="w" placeholder="waga kg" style="max-width:220px"><input id="h" placeholder="wzrost cm" style="max-width:220px"><div class="badge" id="out">—</div></div>`;
+   const w=document.getElementById('w'), h=document.getElementById('h'), out=document.getElementById('out');
+   const upd=()=>{const ww=Number(w.value||0), hh=Number(h.value||0); if(!ww||!hh) return out.textContent='—'; const m=hh/100; out.textContent=(ww/(m*m)).toFixed(1);};
+   w.oninput=upd; h.oninput=upd;
+ }},
+ {id:'bmr',name:'BMR',render:()=>{calcBody.innerHTML=`<div class="row" style="flex-wrap:wrap"><select id="s" style="max-width:220px"><option value="m">Mężczyzna</option><option value="f">Kobieta</option></select><input id="w" placeholder="kg" style="max-width:160px"><input id="h" placeholder="cm" style="max-width:160px"><input id="a" placeholder="wiek" style="max-width:140px"><div class="badge" id="out">—</div></div>`;
+   const s=document.getElementById('s'), w=document.getElementById('w'), h=document.getElementById('h'), a=document.getElementById('a'), out=document.getElementById('out');
+   const upd=()=>{const ww=Number(w.value||0), hh=Number(h.value||0), aa=Number(a.value||0); if(!ww||!hh||!aa) return out.textContent='—'; const k=s.value==='m'?5:-161; out.textContent=Math.round(10*ww+6.25*hh-5*aa+k)+' kcal';};
+   [s,w,h,a].forEach(x=>x.oninput=upd); s.onchange=upd;
+ }},
+ {id:'plates',name:'Talerze',render:()=>{calcBody.innerHTML=`<div class="small">Gryf 20kg • na jedną stronę</div><div class="row" style="margin-top:10px;flex-wrap:wrap"><input id="t" placeholder="ciężar docelowy kg" style="max-width:240px"><div class="badge" id="out">—</div></div>`;
+   const t=document.getElementById('t'), out=document.getElementById('out'); const plates=[25,20,15,10,5,2.5,1.25];
+   const upd=()=>{const total=Number(t.value||0); if(!total||total<20) return out.textContent='—'; let per=(total-20)/2; const used=[]; for(const p of plates){while(per>=p-1e-9){used.push(p); per-=p;}} out.textContent=used.length?used.join(' + '):'sam gryf';};
+   t.oninput=upd;
+ }},
+];
+function openModal(){modalBackdrop.style.display='flex';}
+function closeModal(){modalBackdrop.style.display='none';}
+btnCalculators.onclick=()=>{openModal(); renderCalcTabs('1rm');};
+btnCloseModal.onclick=closeModal;
+modalBackdrop.onclick=(e)=>{if(e.target===modalBackdrop) closeModal();};
+function renderCalcTabs(active){
+  calcTabs.innerHTML='';
+  calculators.forEach(c=>{const b=document.createElement('button'); b.className='tab'+(c.id===active?' active':''); b.textContent=c.name; b.onclick=()=>renderCalcTabs(c.id); calcTabs.appendChild(b);});
+  (calculators.find(x=>x.id===active)||calculators[0]).render();
+}
+
+// Trainer mode button
+btnMode.onclick=()=>{if(currentRole!=='trainer')return; localStorage.setItem('fg_mode','trainer'); location.href='trainer.html';};
+
+// Init
+appLib.auth.onAuthStateChanged(async user=>{
+  currentUser=user; if(!user){location.href='login.html'; return;}
+  userEmail.textContent=user.email;
+  await lib.ensureUserDoc(user.uid,user.email);
+  currentRole=await lib.getUserRole(user.uid)||'user';
+  if(currentRole==='trainer'){btnMode.style.display='inline-block'; modeLabel.textContent='Tryb: Użytkownik (trener)'; const mode=localStorage.getItem('fg_mode')||'user'; if(mode==='trainer'){location.href='trainer.html'; return;}}
+  if(unsubLib) unsubLib(); unsubLib=lib.subscribeLibrary(user.uid,(items)=>{state.library=items; renderLibrary();});
+  await refreshLibrary();
+  if(unsubPlans) unsubPlans(); unsubPlans=lib.subscribePlans(user.uid,(plans)=>{state.plans=plans; if(!state.activePlanId&&plans.length) state.activePlanId=plans[0].id; const ap=getActivePlan(); if(ap && (!state.activeWeekId || !(ap.weeks||[]).some(w=>w.id===state.activeWeekId))) state.activeWeekId=(ap.weeks&&ap.weeks[0])?ap.weeks[0].id:null; renderAll();});
+});
+</script>
+</body></html>

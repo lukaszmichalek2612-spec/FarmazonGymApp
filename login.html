@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FarmazonGymApp — Login</title><link rel="stylesheet" href="style.css"></head>
+<body><div class="container">
+<div class="row" style="justify-content:space-between"><div><div style="font-weight:900;font-size:20px">FarmazonGymApp</div><div class="small">Logowanie / Rejestracja • PRO v3</div></div><div class="small">Firebase</div></div>
+<div class="card">
+<h2 style="margin:0 0 6px 0">Zaloguj się</h2>
+<div class="small">Użytkownik → app.html • Trener → wybór trybu</div>
+<div class="row" style="margin-top:12px"><input id="email" placeholder="Email" autocomplete="email"/></div>
+<div class="row" style="margin-top:10px"><input id="pass" type="password" placeholder="Hasło" autocomplete="current-password"/></div>
+<div class="row" style="margin-top:12px;flex-wrap:wrap">
+<button id="btnLogin" class="button">Zaloguj</button>
+<button id="btnRegister" class="ghost">Zarejestruj</button>
+<button id="btnReset" class="ghost">Reset hasła</button>
+</div>
+<div id="msg" class="small" style="margin-top:10px;min-height:18px"></div>
+<hr class="sep"/>
+<div class="small">Trener: Firestore → users/{uid} → <span class="badge">role="trainer"</span></div>
+</div>
+<div class="footer">FarmazonGymApp PRO v3</div>
+</div>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="app.js"></script>
+<script>
+const msg=document.getElementById('msg'), email=document.getElementById('email'), pass=document.getElementById('pass');
+function show(m,ok=false){msg.textContent=m;msg.style.color=ok?'var(--ok)':'var(--muted)';setTimeout(()=>{msg.textContent='';msg.style.color='var(--muted)';},4500);}
+document.getElementById('btnRegister').onclick=async()=>{try{const e=email.value.trim(),p=pass.value;if(!e||!p)return show('Podaj email i hasło');await appLib.register(e,p);show('✅ Zarejestrowano. Zaloguj się.',true);}catch(err){console.error(err);show(err.message||String(err));}};
+document.getElementById('btnLogin').onclick=async()=>{try{const e=email.value.trim(),p=pass.value;if(!e||!p)return show('Podaj email i hasło');await appLib.login(e,p);}catch(err){console.error(err);show(err.message||String(err));}};
+document.getElementById('btnReset').onclick=async()=>{try{const e=email.value.trim();if(!e)return show('Wpisz email');await firebase.auth().sendPasswordResetEmail(e);show('📩 Wysłano reset hasła.',true);}catch(err){console.error(err);show(err.message||String(err));}};
+appLib.auth.onAuthStateChanged(async user=>{if(!user)return;const role=await appLib.getUserRole(user.uid);if(role==='trainer'){const mode=localStorage.getItem('fg_mode')||'trainer';location.href=mode==='user'?'app.html':'trainer.html';}else location.href='app.html';});
+</script></body></html>
